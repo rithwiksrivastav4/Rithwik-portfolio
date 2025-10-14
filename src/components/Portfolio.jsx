@@ -12,7 +12,7 @@ const CONTACT = {
   instagram: "https://www.instagram.com/rithwiksrivastav9/",
   snapchat: "https://www.snapchat.com/add/rithwiksrivas21?share_id=py7Aksugy7I&locale=en-IN",
   x: "https://x.com/rithwiksri534",
-  resume: "/Rithwik_srivastav_devops.pdf",
+  resume: "/Rithwik_devops_engineer.pdf",
 };
 
 // Data (skills, projects, education, internships, certificates)
