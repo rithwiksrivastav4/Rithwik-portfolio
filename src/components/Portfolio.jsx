@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Mail, Github, Linkedin, DownloadCloud, Instagram, Twitter } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -65,7 +65,7 @@ const EDUCATION = [
 ];
 
 const INTERNSHIPS = [
-  { company:"VCUBE Software Solutions", role:"DevOps Intern", duration:"Mar 2025 – Apr 2025", 
+  { company:"VCUBE Software Solutions", role:"DevOps Intern", duration:"Mar 2025 – Apr 2025",
     work: [
       "Worked on Kubernetes, Docker, Jenkins, Terraform, and Ansible.",
       "Implemented CI/CD pipelines for automated deployments.",
@@ -85,36 +85,151 @@ const CERTIFICATES = [
 ];
 
 export default function Portfolio() {
+  // theme + UI state
   const [theme, setTheme] = useState("dark");
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [showThemeToggle, setShowThemeToggle] = useState(false);
+
+  // certificates modal state
+  const [certModalOpen, setCertModalOpen] = useState(false);
+  const [activeCert, setActiveCert] = useState(null);
+
+  // 3D carousel state
+  const [current3DIndex, setCurrent3DIndex] = useState(0);
+  const [rotateDeg, setRotateDeg] = useState(0);
+  const [autoRotateRunning, setAutoRotateRunning] = useState(true);
+  const carouselRef = useRef(null);
+
+  // additional features requested
+  const [zoomingIndex, setZoomingIndex] = useState(null);
+  const [carouselRadius, setCarouselRadius] = useState(520);
+  const ROTATE_INTERVAL = 7000; // 7s per card (slower)
+
+  // derived values
+  const totalCerts = CERTIFICATES.length;
+  const angleStep = totalCerts > 0 ? (360 / totalCerts) : 0;
+
+  // detect touch devices
+  const isTouch = typeof window !== 'undefined' && (('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
+
+  // persist theme to localStorage and apply on load
+  useEffect(()=>{
+    try{
+      const saved = localStorage.getItem('site-theme');
+      if(saved) setTheme(saved);
+    }catch(e){}
+  },[]);
+
   useEffect(()=>{
     if(theme==="dark") document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
+    try{ localStorage.setItem('site-theme', theme); }catch(e){}
   },[theme]);
 
-  // Contact form handled via mailto (works across devices)
+  // show theme toggle on scroll
+  useEffect(()=>{
+    const onScroll = () => {
+      setShowThemeToggle(window.scrollY > 80);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return ()=> window.removeEventListener('scroll', onScroll);
+  },[]);
+
+  // compute responsive radius
+  useEffect(() => {
+    const updateRadius = () => {
+      const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
+      // smaller radius than before to keep cards closer when we reduced size
+      setCarouselRadius(w < 768 ? 300 : 520);
+    };
+    updateRadius();
+    window.addEventListener('resize', updateRadius);
+    return () => window.removeEventListener('resize', updateRadius);
+  }, []);
+
+  // update rotation when index changes
+  useEffect(()=>{
+    setRotateDeg(-angleStep * current3DIndex);
+  },[current3DIndex, angleStep]);
+
+  // Robust auto-rotate effect
+  useEffect(() => {
+    if (!autoRotateRunning || totalCerts === 0) return undefined;
+
+    const tick = () => {
+      setCurrent3DIndex(prev => {
+        const next = (prev + 1) % totalCerts;
+        setRotateDeg(-angleStep * next);
+        return next;
+      });
+    };
+
+    const id = setInterval(tick, ROTATE_INTERVAL);
+
+    return () => clearInterval(id);
+  }, [autoRotateRunning, totalCerts, angleStep]);
+
+  // close mobile on resize > md
+  useEffect(()=>{
+    const onResize = () => { if(window.innerWidth >= 768) setMobileOpen(false); };
+    window.addEventListener('resize', onResize);
+    return ()=> window.removeEventListener('resize', onResize);
+  },[]);
+
+  // Contact form handled via mailto (progressive enhancement)
   const handleSubmitMail = (e) => {
-    // form uses action mailto so no JS needed; keep for progressive enhancement
     e.preventDefault();
-    const form = e.target;
-    const subject = encodeURIComponent(form.subject?.value || "Contact via portfolio");
-    const body = encodeURIComponent(form.body?.value || "");
-    window.location.href = `mailto:${CONTACT.email}?subject=${subject}&body=${body}`;
+    try {
+      const form = e.target;
+      const subject = encodeURIComponent(form.subject?.value || "Contact via portfolio");
+      const body = encodeURIComponent(form.body?.value || "");
+      window.location.href = `mailto:${CONTACT.email}?subject=${subject}&body=${body}`;
+    } catch (err) {
+      console.error("Contact form submit failed:", err);
+    }
   };
 
-  // Helpers for theme-aware glow classes
+  // helper functions for certificates modal
+  const openCert = (index) => { setActiveCert(CERTIFICATES[index]); setCertModalOpen(true); };
+  const closeCert = () => { setCertModalOpen(false); setActiveCert(null); };
+
+  // click-to-zoom before opening modal
+  const handleCardClick = (index) => {
+    setZoomingIndex(index);
+    setAutoRotateRunning(false);
+    setCurrent3DIndex(index);
+    setRotateDeg(-angleStep * index);
+    setTimeout(() => {
+      setZoomingIndex(null);
+      openCert(index);
+    }, 300);
+  };
+
+  // helpers for theme-aware classes
   const glowClass = theme==="dark" ? "shadow-[0_0_16px_rgba(99,102,241,0.9)]" : "shadow-[0_0_10px_rgba(59,130,246,0.25)]";
-  const cardBg = theme==="dark" ? "bg-slate-800/20" : "bg-white";
+  const cardBg = theme==="dark" ? "bg-black/20" : "bg-white";
+
+  // pause/resume auto-rotate safely
+  const pauseAutoRotate = () => setAutoRotateRunning(false);
+  const resumeAutoRotate = () => setAutoRotateRunning(true);
+
+  // rotate transform applied to outer carousel element
+  const carouselStyle = { transform: `translate(-50%,-50%) rotateY(${rotateDeg}deg)` };
 
   return (
-    <div className="min-h-screen transition-colors duration-300 bg-white dark:bg-gradient-to-b dark:from-slate-900 dark:via-slate-900 dark:to-gray-900 text-gray-900 dark:text-slate-100 antialiased">
+    <div className="min-h-screen transition-colors duration-300 bg-white dark:bg-black text-gray-900 dark:text-slate-100 antialiased">
       {/* theme toggle */}
-      <button
+      <motion.button
         aria-label="toggle theme"
         onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
-        className="fixed top-4 right-4 z-50 px-3 py-2 rounded-full bg-gray-200 dark:bg-slate-800 hover:scale-105 transition"
+        className="fixed right-4 z-50 px-3 py-2 rounded-full bg-gray-200 dark:bg-slate-800 hover:scale-105 transition"
+        initial={{ y: -80, opacity: 0 }}
+        animate={ showThemeToggle ? { y: 0, opacity: 1 } : { y: -80, opacity: 0 } }
+        transition={{ type: 'spring', stiffness: 120, damping: 18 }}
       >
         {theme==="dark" ? "🌙" : "☀️"}
-      </button>
+      </motion.button>
 
       <header className="max-w-6xl mx-auto p-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -127,7 +242,8 @@ export default function Portfolio() {
           </div>
         </div>
 
-        <nav className="flex items-center gap-3 text-sm">
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-3 text-sm">
           <a href="#projects" className="hover:underline">Projects</a>
           <a href="#skills" className="hover:underline">Skills</a>
           <a href="#education" className="hover:underline">Education</a>
@@ -138,6 +254,53 @@ export default function Portfolio() {
             <DownloadCloud size={16}/> Resume
           </a>
         </nav>
+
+        {/* Mobile menu button */}
+        <div className="md:hidden flex items-center gap-2">
+          <button onClick={()=>setMobileOpen(o=>!o)} aria-label="toggle menu" className="p-2 rounded-md bg-gray-100 dark:bg-slate-800 border">
+            <span className={`block w-5 h-[2px] bg-gray-800 dark:bg-slate-200 transition-transform ${mobileOpen? 'rotate-45 translate-y-1.5' : ''}`}></span>
+            <span className={`block w-5 h-[2px] bg-gray-800 dark:bg-slate-200 my-1 transition-opacity ${mobileOpen? 'opacity-0' : 'opacity-100'}`}></span>
+            <span className={`block w-5 h-[2px] bg-gray-800 dark:bg-slate-200 transition-transform ${mobileOpen? '-rotate-45 -translate-y-1.5' : ''}`}></span>
+          </button>
+        </div>
+
+        {/* Mobile nav overlay */}
+        {mobileOpen && (
+          <div className="fixed inset-0 z-40 flex">
+            <div className="w-full max-w-xs bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold">RS</div>
+                  <div>
+                    <div className="font-semibold text-gray-900 dark:text-slate-100">{CONTACT.name}</div>
+                    <div className="text-xs text-gray-600 dark:text-slate-400">DevOps / Cloud Engineer</div>
+                  </div>
+                </div>
+                <button onClick={()=>setMobileOpen(false)} aria-label="close menu" className="p-2 rounded-md bg-gray-100 dark:bg-slate-800 border">✕</button>
+              </div>
+
+              <nav className="mt-6 flex flex-col gap-3 text-sm">
+                <a href="#projects" onClick={()=>setMobileOpen(false)} className="py-2">Projects</a>
+                <a href="#skills" onClick={()=>setMobileOpen(false)} className="py-2">Skills</a>
+                <a href="#education" onClick={()=>setMobileOpen(false)} className="py-2">Education</a>
+                <a href="#internship" onClick={()=>setMobileOpen(false)} className="py-2">Internship</a>
+                <a href="#certificates" onClick={()=>setMobileOpen(false)} className="py-2">Certificates</a>
+                <a href="#contact" onClick={()=>setMobileOpen(false)} className="py-2">Reach Me</a>
+                <a href={CONTACT.resume} download onClick={()=>setMobileOpen(false)} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-white text-sm shadow-md">
+                  <DownloadCloud size={16}/> Resume
+                </a>
+              </nav>
+
+              <div className="mt-6 text-sm text-gray-600 dark:text-slate-400">
+                <div><strong>Email:</strong> <a href={`mailto:${CONTACT.email}`} className="text-indigo-600 dark:text-indigo-300">{CONTACT.email}</a></div>
+                <div className="mt-2"><strong>Phone:</strong> <span>{CONTACT.phone}</span></div>
+              </div>
+
+            </div>
+            <div className="flex-1" onClick={()=>setMobileOpen(false)} />
+          </div>
+        )}
+
       </header>
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
@@ -157,7 +320,7 @@ export default function Portfolio() {
           </motion.div>
 
           <motion.div initial={{opacity:0, x:120}} animate={{opacity:1, x:0}} transition={{duration:1}} className={`flex justify-center ${glowClass}`}>
-            <motion.img src="/myimage.png" alt="profile" className="rounded-2xl border-4 border-indigo-500 max-h-[420px] object-cover"
+            <motion.img src="/myimage.png" alt="profile" className="rounded-2xl border-4 border-indigo-500 max-h-[420px] object-cover w-full md:w-auto"
               initial={{opacity:0, x:-200}} animate={{opacity:1, x:0, y:[0,-8,0]}} transition={{opacity:{duration:0.9}, x:{duration:1}, y:{duration:4, repeat:Infinity}}}
             />
           </motion.div>
@@ -167,7 +330,7 @@ export default function Portfolio() {
         <section id="projects" className="mt-12">
           <h2 className="text-2xl font-bold">Projects</h2>
           <div className="mt-6 grid sm:grid-cols-2 gap-6">
-            {PROJECTS.map((p,i)=>(
+            {PROJECTS.map((p,i)=>( 
               <motion.article key={p.title} whileHover={{scale:1.02}} animate={{ boxShadow: theme==="dark" ? "0 0 18px rgba(99,102,241,0.9)" : "0 0 12px rgba(59,130,246,0.25)" }} transition={{duration:3, repeat:Infinity, delay:i*0.6, ease:"easeInOut"}} className={`rounded-xl border p-5 ${cardBg} border-slate-300`}>
                 <h3 className="font-semibold text-lg text-gray-900 dark:text-slate-100">{p.title}</h3>
                 <p className="mt-2 text-sm text-gray-700 dark:text-slate-300">{p.desc}</p>
@@ -183,7 +346,7 @@ export default function Portfolio() {
         <section id="skills" className="mt-12">
           <h2 className="text-2xl font-bold">Skills & Tools</h2>
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {SKILL_LOGOS.map((s,i)=>(
+            {SKILL_LOGOS.map((s,i)=>( 
               <motion.div key={s.name} whileHover={{scale:1.08, rotate:360}} animate={{boxShadow: theme==="dark" ? "0 0 18px rgba(99,102,241,0.9)" : "0 0 12px rgba(59,130,246,0.25)"}} transition={{duration:3, repeat:Infinity, delay:i*0.15}} className={`flex items-center gap-3 p-3 rounded-xl border ${cardBg} border-slate-300`}>
                 <img src={s.src} alt={s.name} className="h-8 w-8 object-contain"/>
                 <span className="text-sm font-medium text-gray-900 dark:text-slate-100">{s.name}</span>
@@ -225,13 +388,156 @@ export default function Portfolio() {
         {/* Certificates */}
         <section id="certificates" className="mt-12">
           <h2 className="text-2xl font-bold">Certificates</h2>
-          <motion.div className="mt-6 flex space-x-4 overflow-x-auto pb-4" animate={{x:[0,-700,0]}} transition={{duration:38, repeat:Infinity, ease:"linear"}}>
-            {CERTIFICATES.concat(CERTIFICATES).map((c,i)=>(
-              <motion.div key={i} whileHover={{scale:1.08}} className={`flex-shrink-0 w-56 h-36 rounded-lg overflow-hidden border ${cardBg} border-slate-300`}>
-                <img src={c.src} alt={c.title} className="w-full h-full object-cover"/>
-              </motion.div>
-            ))}
-          </motion.div>
+
+          <style>{`
+            .cert-3d-wrapper {
+              width:100%;
+              height:420px;
+              position:relative;
+              perspective:1600px;
+              margin-top:60px;
+              padding-top: 24px;
+              overflow:visible;
+            }
+            .cert-3d-carousel {
+              width:100%;
+              height:100%;
+              position:absolute;
+              left:50%;
+              top:50%;
+              transform-style:preserve-3d;
+              transform: translate(-50%,-50%) rotateY(0deg);
+              transition: transform 900ms cubic-bezier(.22,.9,.2,1);
+            }
+            .cert-3d-item {
+              width:220px;
+              height:300px;
+              position:absolute;
+              left:50%;
+              top:50%;
+              transform-style:preserve-3d;
+              transform-origin:center;
+              border-radius:14px;
+              overflow:hidden;
+              transition: transform 420ms ease, box-shadow 420ms ease, opacity 420ms ease, filter 420ms ease;
+              will-change: transform, opacity;
+            }
+            .cert-3d-item img { width:100%; height:100%; object-fit:cover; display:block; }
+            .cert-3d-item.active { z-index:60; box-shadow: 0 36px 100px rgba(99,102,241,0.6); filter: contrast(1.04) saturate(1.05); }
+            .cert-3d-item.side { box-shadow: 0 12px 40px rgba(0,0,0,0.16); filter: blur(0.8px) saturate(0.98); opacity:0.9; }
+            .cert-3d-item.hidden { opacity:0.12; filter: blur(2px) saturate(0.9) brightness(0.9); pointer-events: none; }
+            .cert-3d-item.zooming { transition: transform 260ms ease; box-shadow: 0 48px 140px rgba(99,102,241,0.72); }
+            .cert-3d-item::after {
+              content: "";
+              position: absolute;
+              left: 50%;
+              bottom: -18px;
+              width: 70%;
+              height: 18px;
+              transform: translateX(-50%) scaleX(1);
+              border-radius: 9999px;
+              background: radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0.08));
+              filter: blur(10px);
+              opacity: 0.9;
+              transition: opacity 240ms ease, transform 240ms ease;
+              pointer-events: none;
+            }
+            .cert-nav { position: absolute; top:50%; left:0; right:0; display:flex; justify-content:space-between; transform:translateY(-50%); pointer-events:none; padding:0 12px; }
+            .cert-nav button { pointer-events:auto; background: rgba(0,0,0,0.45); color:#fff; border:none; width:44px; height:44px; border-radius:9999px; display:flex; align-items:center; justify-content:center; margin:0 8px; backdrop-filter: blur(6px); }
+            .cert-indicator { margin-top:12px; text-align:center; color: rgba(148,163,184,1); }
+            .dark .cert-3d-item.active { box-shadow: 0 48px 140px rgba(99,102,241,0.75); }
+            .dark .cert-nav button { background: rgba(255,255,255,0.06); color: #fff; }
+            @media (max-width: 1024px) { .cert-3d-wrapper { height:380px; margin-top:48px; padding-top:18px; } .cert-3d-item { width:190px; height:270px; } }
+            @media (max-width: 768px) { .cert-3d-wrapper { height:320px; margin-top:38px; padding-top:12px; } .cert-3d-item { width:140px; height:210px; } }
+            @media (prefers-reduced-motion: reduce) { .cert-3d-carousel { transition: none !important; } }
+          `}</style>
+
+          <div
+            className="cert-3d-wrapper"
+            onMouseEnter={() => { pauseAutoRotate(); }}
+            onMouseLeave={() => { resumeAutoRotate(); }}
+          >
+            <div
+              className="cert-3d-carousel"
+              ref={carouselRef}
+              style={carouselStyle}
+            >
+              {CERTIFICATES.map((c, i) => {
+                const total = CERTIFICATES.length;
+                const angle = (360 / total) * i;
+                const radius = carouselRadius;
+                // compute shortest difference around circle
+                const diff = Math.abs(i - current3DIndex);
+                const distance = Math.min(diff, total - diff);
+
+                // decide scale: active gets large scale, others 1
+                const scale = (i === current3DIndex) ? 1.18 : 1.0; // reduced center scale
+
+                // translate center first (keeps perfect centering), then rotate+push out, then scale
+                const transformStr = `translate(-50%,-50%) rotateY(${angle}deg) translateZ(${radius}px) scale(${scale})`;
+
+                const cls = `${i === current3DIndex ? 'cert-3d-item active' : (distance <= 1 ? 'cert-3d-item side' : 'cert-3d-item hidden')} ${zoomingIndex === i ? 'zooming' : ''}`;
+
+                return (
+                  <div
+                    key={i}
+                    className={cls}
+                    style={{ transform: transformStr }}
+                    onClick={() => { handleCardClick(i); }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if(e.key === 'Enter') handleCardClick(i); }}
+                    aria-label={`Open certificate ${c.name}`}
+                  >
+                    <img src={c.src} alt={c.name} />
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="cert-nav">
+              <button aria-label="prev" onClick={() => {
+                const next = (current3DIndex - 1 + totalCerts) % totalCerts;
+                setCurrent3DIndex(next);
+                setAutoRotateRunning(false);
+                setRotateDeg(-angleStep * next);
+              }}>&lt;</button>
+              <button aria-label="next" onClick={() => {
+                const next = (current3DIndex + 1) % totalCerts;
+                setCurrent3DIndex(next);
+                setAutoRotateRunning(false);
+                setRotateDeg(-angleStep * next);
+              }}>&gt;</button>
+            </div>
+          </div>
+
+          <div className="cert-indicator">Showing {current3DIndex+1} of {CERTIFICATES.length}</div>
+
+          {/* Full-size lightbox / modal */}
+          {certModalOpen && activeCert && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/75" onClick={closeCert} />
+              <div className="relative z-10 max-w-[92vw] w-full bg-transparent rounded overflow-hidden">
+                <button onClick={closeCert} aria-label="Close certificate" className="absolute top-3 right-3 z-20 p-2 rounded-full bg-white/90 dark:bg-slate-800/90 hover:scale-105 transition">✕</button>
+
+                <div className="w-full flex items-center justify-center" style={{ background: 'transparent' }}>
+                  <img
+                    src={activeCert.src}
+                    alt={activeCert.name}
+                    style={{ maxWidth: '90vw', maxHeight: '90vh', width: 'auto', height: 'auto', objectFit: 'contain' }}
+                  />
+                </div>
+
+                <div className="p-4 text-center">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{activeCert.name}</h3>
+                  <div className="mt-3 flex items-center justify-center gap-3">
+                    <a href={activeCert.src} target="_blank" rel="noreferrer" className="px-3 py-2 rounded bg-indigo-600 text-white">Open in new tab</a>
+                    <button onClick={closeCert} className="px-3 py-2 rounded border">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Reach Me (Contact) */}
